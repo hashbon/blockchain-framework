@@ -1,0 +1,29 @@
+{
+    "version": "1.0.0",
+    "name": "matbea/bitcoinphp-lib",
+    "minimum-stability": "stable",
+    "type": "library",
+    "description": "Client library for Matbea API service.",
+    "license": "Unlicense",
+    "authors": [
+        {
+            "name": "Matbea Team",
+            "email": "mail@matbea.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.4.0",
+        "monolog/monolog": "^1.22",
+        "bitwasp/bitcoin": "^0.0.33",
+	"garoevans/php-enum": "~1.2"
+    },
+    "config": {
+        "disable-tls": true,
+        "secure-http": false
+    },
+    "autoload": {
+        "psr-4": {
+            "BTCBridge\\": "src/BTCBridge"
+        }
+    }
+}
