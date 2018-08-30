@@ -1054,16 +1054,14 @@ class Bridge
     /**
      * The getnewaddress RPC returns a new Bitcoin address for receiving payments.
      * @link https://bitcoin.org/en/developer-reference#getnewaddress
-     *
+     * @param boolean $saveToWalletDat
      * @throws BERuntimeException in case of error of this type
-     *
-     * @throws BEInvalidArgumentException
-     *
+     * @throws BEInvalidArgumentException in case of error of this type
      * @return DetailedAddress
      */
-    public function getnewaddress()
+    public function getnewaddress($saveToWalletDat = true)
     {
-        $retVal = new DetailedAddress();
+        $retVal = new DetailedAddress;
         try {
             $privateKey = PrivateKeyFactory::create();
             $wif = $privateKey->toWif($this->network);
@@ -1078,24 +1076,26 @@ class Bridge
             $p2wpkh = new SegwitAddress($p2wpkhWP);
             $retVal->setBech32($p2wpkh->getAddress());
             //echo "Bech32: {$address}\n";
-
             $p2shP2wsh = new ScriptHashAddress($p2wpkhWP->getScript()->getScriptHash());
             $retVal->setP2sh($p2shP2wsh->getAddress());
             //echo "p2wsh: {$p2shP2wsh->getAddress()}\n";
-            return $retVal;
         } catch (\Exception $ex) {
             throw new BERuntimeException($ex->getMessage());
         } //May be \RuntimeException will raised in the BitWASP library - we'll not change this
-        if (!file_put_contents(
-            $this->getOption(Bridge::OPT_LOCAL_PATH_OF_WALLET_DATA),
-            ($wif.";".$address.PHP_EOL),
-            FILE_APPEND
-        ) ) {
-            throw new BERuntimeException(
-                "Write data into the file " . $this->getOption(Bridge::OPT_LOCAL_PATH_OF_WALLET_DATA) . " failed."
-            );
+
+        if ($saveToWalletDat) {
+            if (!file_put_contents(
+                    $this->getOption(Bridge::OPT_LOCAL_PATH_OF_WALLET_DATA),
+                    $retVal->getWif() . ';' . $retVal->getLegacy() . ';'
+                    . $retVal->getBech32() . ';'. $retVal->getP2sh() . PHP_EOL,
+                    FILE_APPEND
+                ) ) {
+                    throw new BERuntimeException(
+                        'Write data into the file ' . $this->getOption(Bridge::OPT_LOCAL_PATH_OF_WALLET_DATA) . ' failed.'
+                );
+            }
         }
-        return $address;
+        return $retVal;
     }
 
     /**
@@ -1114,26 +1114,26 @@ class Bridge
     public function dumpprivkey($address)
     {
         if ((!is_string($address)) || empty($address)) {
-            throw new BEInvalidArgumentException("address variable must be non empty string.");
+            throw new BEInvalidArgumentException('address variable must be non empty string');
         }
 
         $path = $this->getOption(Bridge::OPT_LOCAL_PATH_OF_WALLET_DATA);
 
-        $handle = fopen($path, "r");
+        $handle = fopen($path, 'r');
         if (false === $handle) {
-            throw new BERuntimeException("Read data from the file " . $path . " failed.");
+            throw new BERuntimeException('Read data from the file ' . $path . ' failed.');
         }
         $i = 0;
-        while (($data = fgetcsv($handle, 1000, ";")) !== false) {
+        while (($data = fgetcsv($handle, 400, ';')) !== false) {
             ++$i;
             $num = count($data);
-            if (2 != $num) {
+            if (4 != $num) {
                 throw new BERuntimeException(
-                    "Line #" . $i . " in the file " . $path . " contains " .
-                    $num . " fields, must contain 3 fields only."
+                    'Line #' . $i . ' in the file ' . $path . ' contains ' .
+                    $num . ' fields, must contain 3 fields only.'
                 );
             }
-            if ($address == $data[1]) {
+            if (in_array($address, [$data[1], $data[2], $data[3]])) {
                 fclose($handle);
                 return $data[0];
             }
@@ -1158,8 +1158,8 @@ class Bridge
     {
         if ((!is_int($fee)) || ($fee <= intval($this->getOption(self::OPT_MINIMAL_FEE_PER_KB)))) {
             throw new BEInvalidArgumentException(
-                "fee variable must be integer and more or  equal than " .
-                $this->getOption(self::OPT_MINIMAL_FEE_PER_KB) . ")."
+                'fee variable must be integer and more or  equal than ' .
+                $this->getOption(self::OPT_MINIMAL_FEE_PER_KB) . ').'
             );
         }
         $this->setOption(self::OPT_MINIMAL_FEE_PER_KB, strval($fee));

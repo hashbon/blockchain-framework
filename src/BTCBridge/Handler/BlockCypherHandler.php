@@ -235,6 +235,14 @@ class BlockCypherHandler extends AbstractHandler
     /**
      * {@inheritdoc}
      */
+    public function estimatefee($blocks = 2)
+    {
+        return AbstractHandler::HANDLER_UNSUPPORTED_METHOD;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function sendrawtransaction($transaction)
     {
         return AbstractHandler::HANDLER_UNSUPPORTED_METHOD;
