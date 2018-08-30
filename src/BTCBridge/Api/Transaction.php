@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace BTCBridge\Api;
 
@@ -29,7 +29,7 @@ class Transaction
      * Hash of the transaction.
      * @var string
      */
-    protected $hash = null;
+    protected $txId = null;
 
     /**
      * Time at which transaction was included in a block; only present for confirmed transactions.
@@ -68,12 +68,12 @@ class Transaction
     /**
      * BlockHash of the block the transaction is in. Only exists for confirmed transactions.
      *
-     * @param $blockHash
+     * @param string $blockHash
      * @return $this
      */
     public function setBlockHash($blockHash)
     {
-        $this->blockHash = $blockHash;
+        $this->blockHash = (string)$blockHash;
         return $this;
     }
 
@@ -106,7 +106,7 @@ class Transaction
      */
     public function setConfirmationTime($confirmationTime)
     {
-        $this->confirmationTime = $confirmationTime;
+        $this->confirmationTime = (int)$confirmationTime;
         return $this;
     }
 
@@ -136,7 +136,7 @@ class Transaction
      */
     public function setDoubleSpend($doubleSpend)
     {
-        $this->doubleSpend = $doubleSpend;
+        $this->doubleSpend = (boolean)$doubleSpend;
         return $this;
     }
 
@@ -160,7 +160,7 @@ class Transaction
      */
     public function setConfirmations($confirmations)
     {
-        $this->confirmations = $confirmations;
+        $this->confirmations = (int)$confirmations;
         return $this;
     }
 
@@ -276,7 +276,7 @@ class Transaction
      */
     public function setTxId($txId)
     {
-        $this->txId = $txId;
+        $this->txId = (string)$txId;
         return $this;
     }
 

@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of the BTCBridge package.
@@ -11,6 +11,8 @@
 
 namespace BTCBridge\Handler;
 
+use BitWasp\Bitcoin\Address\AddressCreator;
+use BitWasp\Bitcoin\Exceptions\UnrecognizedAddressException;
 use BTCBridge\Bridge;
 use BTCBridge\Api\ListTransactionsOptions;
 use BTCBridge\Api\WalletActionOptions;
@@ -21,7 +23,6 @@ use BTCBridge\Api\TransactionInput;
 use BTCBridge\Api\TransactionOutput;
 use BTCBridge\Api\Address;
 use BTCBridge\Api\BTCValue;
-use BitWasp\Bitcoin\Address\AddressFactory;
 use BTCBridge\Api\CurrencyTypeEnum;
 use BTCBridge\Exception\BEInvalidArgumentException;
 use BTCBridge\Exception\BERuntimeException;
@@ -202,7 +203,7 @@ class MatbeaHandler extends AbstractHandler
             }
             $txr->setConfirmations($txref['confirmations']);
             $txr->setDoubleSpend($txref['double_spend']);
-            $txr->setTxHash($txref['txid']);
+            $txr->setTxId($txref['txid']);
             $txr->setVout($txref['vout']);
             $txr->setConfirmationTime($txref['time']);
             $txr->setCategory($txref['category']);
@@ -210,7 +211,7 @@ class MatbeaHandler extends AbstractHandler
             $txr->setValue(new BTCValue($v));
             $txr->setAddress($txref['address']);
 
-            $txRefHash = (string)$txr->getVout() . '_' . $txr->getTxHash() . '_'
+            $txRefHash = (string)$txr->getVout() . '_' . $txr->getTxId() . '_'
                 . $txr->getConfirmationTime() . '_' . $txr->getCategory() . '_'
                 . (string)$txr->getBlockHeight() . '_' . (string)$txr->getConfirmations()
                 . '_' . $txr->getAddress();
@@ -477,7 +478,7 @@ class MatbeaHandler extends AbstractHandler
             }
             $txr->setConfirmations($txref["confirmations"]);
             $txr->setDoubleSpend($txref["double_spend"]);
-            $txr->setTxHash($txref["tx_hash"]);
+            $txr->setTxId($txref["tx_hash"]);
             $txr->setVout($txref["vout"]);
             $txr->setAddress($txref['address']);
             $txr->setCategory(TransactionReference::CATEGORY_RECEIVE);
@@ -548,6 +549,46 @@ class MatbeaHandler extends AbstractHandler
     /**
      * {@inheritdoc}
      */
+    public function estimatefee($blocks = 2)
+    {
+        if ((!is_int($blocks)) || ($blocks < 1)) {
+            throw new BEInvalidArgumentException('blocks variable array must be positive integer.');
+        }
+
+        $curr = $this->currency;
+        $url = $this->getOption(self::OPT_BASE_URL) . '/' . $curr . '/estimatefee?blocks=' . $blocks;
+        if ($this->token) {
+            $url .= "&token=" . $this->token;
+        }
+
+        $ch = curl_init();
+        $this->prepareCurl($ch, $url);
+        $content = curl_exec($ch);
+        if ((false === $content) || (null === $content)) {
+            throw new BERuntimeException("curl error occured (url:\"" . $url . "\")");
+        }
+        $content = json_decode($content, true);
+        $this->checkMatbeaResult($url, $content);
+        if (!isset($content['result']['estimatefee'])) {
+            $this->logger->error(
+                'Answer of url: "' . $url . '")  does not contain a "estimatefee" field.',
+                ['data' => $content]
+            );
+            throw new BERuntimeException('Answer of url: "' . $url . '")  does not contain a "balance" field.');
+        }
+        $estimatefee = $content['result']['estimatefee'];
+        if (!is_double($estimatefee) || ($estimatefee < 0)) {
+            $msg = 'Answer of url: "' . $url . '")  contains bad value (' . $content['result']['estimatefee']
+                . ') of field "estimatefee" (type=' . gettype($content['result']['estimatefee']) . ').';
+            $this->logger->error($msg, ['data' => $content]);
+            throw new BELogicException($msg);
+        }
+        return $content['result']['estimatefee'];
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function createWallet($walletName, array $addresses, WalletActionOptions $options = null)
     {
         if (!is_string($walletName)) {
@@ -574,8 +615,11 @@ class MatbeaHandler extends AbstractHandler
         $post_data = [];
         if (count($addresses) > 0) {
             $post_data["addresses"] = [];
+            $addressCreator = new AddressCreator;
             foreach ($addresses as $address) {
-                if (!AddressFactory::isValidAddress($address, $this->network)) {
+                try {
+                    $addressCreator->fromString($address, $this->network);
+                } catch (UnrecognizedAddressException $exception) {
                     throw new BEInvalidArgumentException("No valid address (\"" . $address . "\" passed).");
                 }
                 $post_data["addresses"] [] = $address;
@@ -650,8 +694,11 @@ class MatbeaHandler extends AbstractHandler
         if (empty($addresses)) {
             throw new BEInvalidArgumentException("addresses variable must be non empty array.");
         }
+        $addressCreator = new AddressCreator;
         foreach ($addresses as $address) {
-            if (!AddressFactory::isValidAddress($address, $this->network)) {
+            try {
+                $addressCreator->fromString($address, $this->network);
+            } catch (UnrecognizedAddressException $exception) {
                 throw new BEInvalidArgumentException("No valid address (\"" . $address . "\" passed).");
             }
         }
@@ -738,8 +785,11 @@ class MatbeaHandler extends AbstractHandler
         if (empty($addresses)) {
             throw new BEInvalidArgumentException("addresses variable must be non empty array.");
         }
+        $addressCreator = new AddressCreator;
         foreach ($addresses as $address) {
-            if (!AddressFactory::isValidAddress($address, $this->network)) {
+            try {
+                $addressCreator->fromString($address, $this->network);
+            } catch (UnrecognizedAddressException $exception) {
                 throw new BEInvalidArgumentException("No valid address (\"" . $address . "\" passed).");
             }
         }

@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of the BTCBridge package.
@@ -221,6 +221,14 @@ class BlockTrailHandler extends AbstractHandler
      * {@inheritdoc}
      */
     public function sendrawtransaction($transaction)
+    {
+        return AbstractHandler::HANDLER_UNSUPPORTED_METHOD;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function estimatefee($blocks = 2)
     {
         return AbstractHandler::HANDLER_UNSUPPORTED_METHOD;
     }

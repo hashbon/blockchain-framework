@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace BTCBridge\Api;
 
@@ -58,7 +58,7 @@ class Address
      */
     public function setAddress($address)
     {
-        $this->address = $address;
+        $this->address = (string)$address;
         return $this;
     }
 

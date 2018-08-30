@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace BTCBridge\Api;
 
@@ -133,7 +133,7 @@ class TransactionOutput
      */
     public function setScriptType($scriptType)
     {
-        $this->scriptType = $scriptType;
+        $this->scriptType = (string)$scriptType;
         return $this;
     }
 }

@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of the BTCBridge package.
@@ -113,6 +113,20 @@ class DefaultResultHandler extends AbstractResultHandler
      * {@inheritdoc}
      */
     public function listunspent($data)
+    {
+        if (1 == count($data)) {
+            return $data[0];
+        }
+        if (2 != count($data)) {
+            throw new BEInvalidArgumentException("Data array for verification must have size 1 or 2.");
+        }
+        return $data[0];
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function estimatefee($data)
     {
         if (1 == count($data)) {
             return $data[0];

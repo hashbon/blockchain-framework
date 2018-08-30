@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace BTCBridge\Api;
 
@@ -19,22 +19,20 @@ class ListTransactionsOptions
     /** Default limit for listtransactions method */
     const DEFAULT_LIMIT  = 10;
 
-    /** @var $limit integer */
+    /** @var integer $limit */
     protected $limit;
 
-    /** @var $confirmations integer */
+    /** @var integer $confirmations */
     protected $confirmations;
 
-    /** @var $starttxid string */
+    /** @var string $starttxid */
     protected $starttxid;
 
-    /** @var $omit_addresses string */
+    /** @var string $omit_addresses */
     protected $omit_addresses;
-
 
     /**
      * Constructor
-     *
      */
     public function __construct()
     {

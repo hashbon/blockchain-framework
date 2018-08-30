@@ -1,7 +1,14 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace BTCBridge;
 
+use BitWasp\Bitcoin\Address\AddressCreator;
+use BitWasp\Bitcoin\Address\PayToPubKeyHashAddress;
+use BitWasp\Bitcoin\Address\ScriptHashAddress;
+use BitWasp\Bitcoin\Exceptions\UnrecognizedAddressException;
+use BitWasp\Bitcoin\Script\WitnessProgram;
+use BitWasp\Bitcoin\Address\SegwitAddress;
+use BTCBridge\Api\DetailedAddress;
 use Monolog\Logger;
 use Psr\Log\LoggerInterface;
 use BTCBridge\Api\TransactionReference;
@@ -30,7 +37,6 @@ use BitWasp\Bitcoin\Transaction\OutPoint;
 use BitWasp\Bitcoin\Bitcoin;
 use BitWasp\Bitcoin\Script\ScriptFactory;
 use BitWasp\Bitcoin\Key\PrivateKeyFactory;
-use BitWasp\Bitcoin\Address\AddressFactory;
 use BitWasp\Bitcoin\Exceptions\Base58ChecksumFailure;
 use BitWasp\Bitcoin\Transaction\TransactionFactory;
 use BitWasp\Bitcoin\Transaction\Factory\Signer;
@@ -619,6 +625,43 @@ class Bridge
     }
 
     /**
+     * The estimatefee RPC estimates the transaction fee per kilobyte
+     * that needs to be paid for a transaction to be included within a certain number of blocks.
+     * @link https://bitcoin.org/en/developer-reference#estimatefee Official bitcoin documentation.
+     *
+     * @param int $blocks
+     *
+     * @return double the fee the transaction needs to pay per kilobyte
+     *
+     * @throws BERuntimeException in case of any error of this type
+     * @throws BEInvalidArgumentException if error of this type
+     *
+     */
+    public function estimatefee($blocks = 2)
+    {
+        if ((!is_int($blocks)) || ($blocks < 1)) {
+            throw new BEInvalidArgumentException('blocks variable array must be positive integer.');
+        }
+        $this->timeMeasurementStatistics = [];
+        $this->timeMeasurementStatistics[Bridge::PRIV_TIME_MEASUREMENT_METHOD_NAME] = __METHOD__;
+        $this->timeMeasurementStatistics[Bridge::PRIV_TIME_MEASUREMENT_BEFORE_HANDLERS] = microtime(true);
+        $results = [];
+        foreach ($this->handlers as $handle_num => $handle) {
+            $result = $handle->estimatefee($blocks);
+            if (AbstractHandler::HANDLER_UNSUPPORTED_METHOD !== $result) {
+                $this->timeMeasurementStatistics[Bridge::PRIV_TIME_MEASUREMENT_AFTER_HANDLERS]
+                [$handle_num] = microtime(true);
+                $results [] = $result;
+            }
+        }
+        $this->conflictHandler->estimatefee($results);
+        $this->timeMeasurementStatistics[Bridge::PRIV_TIME_MEASUREMENT_AFTER_CONFLICT_HANDLER] = microtime(true);
+        $ret = $this->resultHandler->estimatefee($results);
+        $this->timeMeasurementStatistics[Bridge::PRIV_TIME_MEASUREMENT_AFTER_RESULT_HANDLER] = microtime(true);
+        return $ret;
+    }
+
+    /**
      * This Method allows you to create a new wallet, by POSTing a partially filled out Wallet or HDWallet object,
      * depending on the endpoint.
      *
@@ -643,10 +686,15 @@ class Bridge
                 $walletName . "\" passed)."
             );
         }
+        $addressCreator = new AddressCreator();
         if (count($addresses) > 0) {
             foreach ($addresses as $address) {
-                if (!AddressFactory::isValidAddress($address, $this->network)) {
-                    throw new BEInvalidArgumentException("No valid address (\"" . $address . "\" passed).");
+                try {
+                    $addressCreator->fromString($address, $this->network);
+                } catch (UnrecognizedAddressException $exception) {
+                    throw new BEInvalidArgumentException(
+                        'No valid address "' . $address . '" passed (' . $exception->getMessage() . ')'
+                    );
                 }
             }
         }
@@ -723,16 +771,21 @@ class Bridge
      * @throws ResultHandlerException
      * @return Wallet
      *
-     * @throws Base58ChecksumFailure
+     * @throws BEInvalidArgumentException
      */
     public function addAddresses(Wallet $wallet, array $addresses, WalletActionOptions $options = null)
     {
+        $addressCreator = new AddressCreator();
         if (empty($addresses)) {
             throw new BEInvalidArgumentException("addresses variable must be non empty array.");
         }
         foreach ($addresses as $address) {
-            if (!AddressFactory::isValidAddress($address, $this->network)) {
-                throw new BEInvalidArgumentException("No valid address (\"" . $address . "\" passed).");
+            try {
+                $addressCreator->fromString($address, $this->network);
+            } catch (UnrecognizedAddressException $exception) {
+                throw new BEInvalidArgumentException(
+                    'No valid address "' . $address . '" passed (' . $exception->getMessage() . ')'
+                );
             }
         }
 
@@ -806,17 +859,21 @@ class Bridge
      * @throws ResultHandlerException
      * @return Wallet
      *
-     * @throws Base58ChecksumFailure
+     * @throws BEInvalidArgumentException
      */
     public function removeAddresses(Wallet $wallet, array $addresses, WalletActionOptions $options = null)
     {
         if (empty($addresses)) {
             throw new BEInvalidArgumentException("addresses variable must be non empty array of strings.");
         }
-        //TODO - catch * @throws Base58ChecksumFailure in try ... isValidAddress .. catch
+        $addressCreator = new AddressCreator();
         foreach ($addresses as $address) {
-            if (!AddressFactory::isValidAddress($address, $this->network)) {
-                throw new BEInvalidArgumentException("No valid address (\"" . $address . "\" passed).");
+            try {
+                $addressCreator->fromString($address, $this->network);
+            } catch (UnrecognizedAddressException $exception) {
+                throw new BEInvalidArgumentException(
+                    'No valid address "' . $address . '" passed (' . $exception->getMessage() . ')'
+                );
             }
         }
 
@@ -1002,15 +1059,30 @@ class Bridge
      *
      * @throws BEInvalidArgumentException
      *
-     * @return \string
+     * @return DetailedAddress
      */
     public function getnewaddress()
     {
+        $retVal = new DetailedAddress();
         try {
             $privateKey = PrivateKeyFactory::create();
-            $address = $privateKey->getPublicKey()->getAddress();
-            $address = $address->getAddress();
             $wif = $privateKey->toWif($this->network);
+            $retVal->setWif($wif);
+            //echo 'wif: ' . $wif . PHP_EOL;
+            $publicKey = $privateKey->getPublicKey();
+            $pubKeyHash = $publicKey->getPubKeyHash();
+            $p2pkh = new PayToPubKeyHashAddress($pubKeyHash);
+            $retVal->setLegacy($p2pkh->getAddress());
+            //echo "p2pkh (legacy) address: {$p2pkh->getAddress()}\n";
+            $p2wpkhWP = WitnessProgram::v0($pubKeyHash);
+            $p2wpkh = new SegwitAddress($p2wpkhWP);
+            $retVal->setBech32($p2wpkh->getAddress());
+            //echo "Bech32: {$address}\n";
+
+            $p2shP2wsh = new ScriptHashAddress($p2wpkhWP->getScript()->getScriptHash());
+            $retVal->setP2sh($p2shP2wsh->getAddress());
+            //echo "p2wsh: {$p2shP2wsh->getAddress()}\n";
+            return $retVal;
         } catch (\Exception $ex) {
             throw new BERuntimeException($ex->getMessage());
         } //May be \RuntimeException will raised in the BitWASP library - we'll not change this
@@ -1094,6 +1166,7 @@ class Bridge
         return true;
     }
 
+    /** @noinspection PhpTooManyParametersInspection */
     /**
      * The sendfrom RPC spends an amount from a local account to a bitcoin address.
      * @link https://bitcoin.org/en/developer-reference#sendfrom
@@ -1201,10 +1274,12 @@ class Bridge
         //$sumAmount;
         //$requiredFee;
 
+        $addressCreator = new AddressCreator();
+
         $transactionSources = [];
         foreach ($outputsForSpent as $output) {
             $txSource = new \stdClass();
-            $txSource->address = AddressFactory::fromString($output->getAddress(), $this->network);
+            $txSource->address = $addressCreator->fromString($output->getAddress(), $this->network);
             $txSource->privateKey = $this->dumpprivkey($output->getAddress());
             if (!$txSource->privateKey) {
                 throw new BERuntimeException(
@@ -1214,7 +1289,7 @@ class Bridge
             $txSource->privateKey = PrivateKeyFactory::fromWif($txSource->privateKey);
             $txSource->pubKeyHash = $txSource->privateKey->getPubKeyHash(); //Very slow method
             $txSource->outputScript = ScriptFactory::scriptPubKey()->payToPubKeyHash($txSource->pubKeyHash);
-            $txSource->sourceTxId = $output->getTxHash();
+            $txSource->sourceTxId = $output->getTxId();
             $txSource->sourceVout = $output->getVout();
             $txSource->amount = $output->getValue()->getSatoshiValue();
             $txSource->outpoint = new OutPoint(Buffer::hex($txSource->sourceTxId), $txSource->sourceVout);
@@ -1226,10 +1301,10 @@ class Bridge
         foreach ($transactionSources as $source) {
             $transaction = $transaction->spendOutPoint($source->outpoint);
         }
-        $transaction = $transaction->payToAddress($amount, AddressFactory::fromString($address, $this->network));
+        $transaction = $transaction->payToAddress($amount, $addressCreator->fromString($address, $this->network));
         if ($change >= $this->getOption(self::OPT_MINIMAL_AMOUNT_FOR_SENT)) {
             $addressForChange = $outputsForSpent[0]->getAddress();
-            $objAddressForChange = AddressFactory::fromString($addressForChange, $this->network);
+            $objAddressForChange = $addressCreator->fromString($addressForChange, $this->network);
             /** @noinspection PhpUndefinedMethodInspection */
             $transaction = $transaction->payToAddress($change, $objAddressForChange);
         }
@@ -1342,10 +1417,12 @@ class Bridge
             }
         } while (true);
 
+        $addressCreator = new AddressCreator();
+
         $transactionSources = [];
         foreach ($outputsForSpent as $output) {
             $txSource = new \stdClass();
-            $txSource->address = AddressFactory::fromString($output->getAddress(), $this->network);
+            $txSource->address = $addressCreator->fromString($output->getAddress(), $this->network);
             $txSource->privateKey = $this->dumpprivkey($output->getAddress());
             if (!$txSource->privateKey) {
                 throw new BERuntimeException(
@@ -1355,7 +1432,7 @@ class Bridge
             $txSource->privateKey = PrivateKeyFactory::fromWif($txSource->privateKey);
             $txSource->pubKeyHash = $txSource->privateKey->getPubKeyHash(); //Very slow method
             $txSource->outputScript = ScriptFactory::scriptPubKey()->payToPubKeyHash($txSource->pubKeyHash);
-            $txSource->sourceTxId = $output->getTxHash();
+            $txSource->sourceTxId = $output->getTxId();
             $txSource->sourceVout = $output->getVout();
             $txSource->amount = $output->getValue()->getSatoshiValue();
             $txSource->outpoint = new OutPoint(Buffer::hex($txSource->sourceTxId), $txSource->sourceVout);
@@ -1367,7 +1444,7 @@ class Bridge
         foreach ($transactionSources as $source) {
             $transaction = $transaction->spendOutPoint($source->outpoint);
         }
-        $transaction = $transaction->payToAddress($amount, AddressFactory::fromString($address, $this->network));
+        $transaction = $transaction->payToAddress($amount, $addressCreator->fromString($address, $this->network));
         if ($change >= $this->getOption(self::OPT_MINIMAL_AMOUNT_FOR_SENT)) {
             $addressForChange = null;
             if (!empty($sendMoneyOptions)) {
@@ -1375,7 +1452,7 @@ class Bridge
             } else {
                 $addressForChange = $outputsForSpent[0]->getAddress();
             }
-            $objAddressForChange = AddressFactory::fromString($addressForChange, $this->network);
+            $objAddressForChange = $addressCreator->fromString($addressForChange, $this->network);
             /** @noinspection PhpUndefinedMethodInspection */
             $transaction = $transaction->payToAddress($change, $objAddressForChange);
         }
@@ -1500,10 +1577,12 @@ class Bridge
             }
         } while (true);
 
+        $addressCreator = new AddressCreator();
+
         $transactionSources = [];
         foreach ($outputsForSpent as $output) {
             $txSource = new \stdClass();
-            $txSource->address = AddressFactory::fromString($output->getAddress(), $this->network);
+            $txSource->address = $addressCreator->fromString($output->getAddress(), $this->network);
             $txSource->privateKey = $this->dumpprivkey($output->getAddress());
             if (!$txSource->privateKey) {
                 throw new BERuntimeException(
@@ -1513,7 +1592,7 @@ class Bridge
             $txSource->privateKey = PrivateKeyFactory::fromWif($txSource->privateKey);
             $txSource->pubKeyHash = $txSource->privateKey->getPubKeyHash(); //Very slow method
             $txSource->outputScript = ScriptFactory::scriptPubKey()->payToPubKeyHash($txSource->pubKeyHash);
-            $txSource->sourceTxId = $output->getTxHash();
+            $txSource->sourceTxId = $output->getTxId();
             $txSource->sourceVout = $output->getVout();
             $txSource->amount = $output->getValue()->getSatoshiValue();
             $txSource->outpoint = new OutPoint(Buffer::hex($txSource->sourceTxId), $txSource->sourceVout);
@@ -1528,12 +1607,12 @@ class Bridge
         foreach ($smoutputs as $sendmanyoutput) {
             $transaction = $transaction->payToAddress(
                 $sendmanyoutput->getAmount(),
-                AddressFactory::fromString($sendmanyoutput->getAddress(), $this->network)
+                $addressCreator->fromString($sendmanyoutput->getAddress(), $this->network)
             );
         }
         if ($change > $this->getOption(self::OPT_MINIMAL_AMOUNT_FOR_SENT)) {
             $addressForChange = $outputsForSpent[0]->getAddress();
-            $objAddressForChange = AddressFactory::fromString($addressForChange, $this->network);
+            $objAddressForChange = $addressCreator->fromString($addressForChange, $this->network);
             /** @noinspection PhpUndefinedMethodInspection */
             $transaction = $transaction->payToAddress($change, $objAddressForChange);
         }
@@ -1650,10 +1729,12 @@ class Bridge
             }
         } while (true);
 
+        $addressCreator = new AddressCreator();
+
         $transactionSources = [];
         foreach ($outputsForSpent as $output) {
             $txSource = new \stdClass();
-            $txSource->address = AddressFactory::fromString($output->getAddress(), $this->network);
+            $txSource->address = $addressCreator->fromString($output->getAddress(), $this->network);
             $txSource->privateKey = $this->dumpprivkey($output->getAddress());
             if (!$txSource->privateKey) {
                 throw new BERuntimeException(
@@ -1663,7 +1744,7 @@ class Bridge
             $txSource->privateKey = PrivateKeyFactory::fromWif($txSource->privateKey);
             $txSource->pubKeyHash = $txSource->privateKey->getPubKeyHash(); //Very slow method
             $txSource->outputScript = ScriptFactory::scriptPubKey()->payToPubKeyHash($txSource->pubKeyHash);
-            $txSource->sourceTxId = $output->getTxHash();
+            $txSource->sourceTxId = $output->getTxId();
             $txSource->sourceVout = $output->getVout();
             $txSource->amount = $output->getValue()->getSatoshiValue();
             $txSource->outpoint = new OutPoint(Buffer::hex($txSource->sourceTxId), $txSource->sourceVout);
@@ -1678,7 +1759,7 @@ class Bridge
         foreach ($smoutputs as $sendmanyoutput) {
             $transaction = $transaction->payToAddress(
                 $sendmanyoutput->getAmount(),
-                AddressFactory::fromString($sendmanyoutput->getAddress(), $this->network)
+                $addressCreator->fromString($sendmanyoutput->getAddress(), $this->network)
             );
         }
         if ($change > $this->getOption(self::OPT_MINIMAL_AMOUNT_FOR_SENT)) {
@@ -1688,20 +1769,20 @@ class Bridge
             } else {
                 $addressForChange = $outputsForSpent[0]->getAddress();
             }
-            $objAddressForChange = AddressFactory::fromString($addressForChange, $this->network);
+            $objAddressForChange = $addressCreator->fromString($addressForChange, $this->network);
             /** @noinspection PhpUndefinedMethodInspection */
             $transaction = $transaction->payToAddress($change, $objAddressForChange);
         }
         /** @noinspection PhpUndefinedMethodInspection */
         $transaction = $transaction->get();
 
-        $ec = Bitcoin::getEcAdapter(); 
+        $ec = Bitcoin::getEcAdapter();
         $signer = new Signer($transaction, $ec);
         for ($i = 0, $ic = count($transactionSources); $i < $ic; ++$i) {
             $signer->sign($i, $transactionSources[$i]->privateKey, $transactionSources[$i]->transactionOutput);
         }
         $signedTransaction = $signer->get();
-        $raw = $signedTransaction->getHex(); 
+        $raw = $signedTransaction->getHex();
         return $this->sendrawtransaction($raw);
     }
 }

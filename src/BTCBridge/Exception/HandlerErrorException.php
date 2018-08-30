@@ -1,4 +1,5 @@
-<?php
+<?php declare(strict_types=1);
+
 namespace BTCBridge\Exception;
 
 use BTCBridge\Handler\AbstractHandler;

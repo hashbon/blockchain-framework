@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace BTCBridge\Api;
 
@@ -97,7 +97,7 @@ class TransactionReference
      */
     public function setAddress($address)
     {
-        $this->address = $address;
+        $this->address = (string)$address;
     }
 
     /**
@@ -118,7 +118,7 @@ class TransactionReference
      */
     public function setDoubleSpend($doubleSpend)
     {
-        $this->doubleSpend = $doubleSpend;
+        $this->doubleSpend = (boolean)$doubleSpend;
         return $this;
     }
 
@@ -140,7 +140,7 @@ class TransactionReference
      */
     public function setTxId($txId)
     {
-        $this->txId = $txId;
+        $this->txId = (string)$txId;
         return $this;
     }
 
@@ -162,7 +162,7 @@ class TransactionReference
      */
     public function setBlockHeight($blockHeight)
     {
-        $this->blockHeight = $blockHeight;
+        $this->blockHeight = is_null($blockHeight) ? null : (int)$blockHeight;
         return $this;
     }
 
@@ -184,7 +184,7 @@ class TransactionReference
      */
     public function setVout($vout)
     {
-        $this->vout = $vout;
+        $this->vout = (int)$vout;
         return $this;
     }
 
@@ -228,7 +228,7 @@ class TransactionReference
      */
     public function setSpent($spent)
     {
-        $this->spent = $spent;
+        $this->spent = (boolean)$spent;
         return $this;
     }
 
@@ -250,7 +250,7 @@ class TransactionReference
      */
     public function setCategory($category)
     {
-        $this->category = $category;
+        $this->category = (string)$category;
         return $this;
     }
 
@@ -294,7 +294,7 @@ class TransactionReference
      */
     public function setConfirmationTime($confirmationTime)
     {
-        $this->confirmationTime = $confirmationTime;
+        $this->confirmationTime = (int)$confirmationTime;
         return $this;
     }
 

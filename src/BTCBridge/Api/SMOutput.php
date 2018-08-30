@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace BTCBridge\Api;
 
@@ -30,7 +30,7 @@ class SMOutput
      */
     public function setAddress($address)
     {
-        $this->address = $address;
+        $this->address = (string)$address;
         return $this;
     }
 
@@ -48,7 +48,7 @@ class SMOutput
      */
     public function setAmount($amount)
     {
-        $this->amount = $amount;
+        $this->amount = (int)$amount;
         return $this;
     }
 }

@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of the BTCBridge package.
@@ -123,6 +123,21 @@ abstract class AbstractResultHandler
      * @return TransactionReference[] The list of unspent outputs
      */
     abstract public function listunspent($data);
+
+    /**
+     * Returns an estimate of the transaction fee per kilobyte
+     * that needs to be paid for a transaction to be included within a certain number of blocks.
+     * @link https://bitcoin.org/en/developer-reference#estimatefee Official bitcoin documentation.
+     *
+     * @param array $data Result from method estimatefee (from all handlers)
+     *
+     * @return double the fee the transaction needs to pay per kilobyte
+     *
+     * @throws BERuntimeException in case of any error of this type
+     * @throws BEInvalidArgumentException if error of this type
+     *
+     */
+    abstract public function estimatefee($data);
 
     /**
      * This Method Creates a new wallet

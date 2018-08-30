@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of the BTCBridge package.
@@ -168,7 +168,7 @@ class DefaultConflictHandler implements ConflictHandlerInterface
                     ($tx->getConfirmations() != $txc->getConfirmations()) ||
                     ($tx->getDoubleSpend() != $txc->getDoubleSpend()) ||
                     //($tx->getSpent() != $txc->getSpent()) ||
-                    ($tx->getTxHash() != $txc->getTxHash()) ||
+                    ($tx->getTxId() != $txc->getTxId()) ||
                     ($tx->getVout() != $txc->getVout()) ||
                     ($gmpCmp != 0)
                 ) {
@@ -194,7 +194,7 @@ class DefaultConflictHandler implements ConflictHandlerInterface
                     ($tx->getConfirmations() != $txc->getConfirmations()) ||
                     ($tx->getDoubleSpend() != $txc->getDoubleSpend()) ||
                     //($tx->getSpent() != $txc->getSpent()) ||
-                    ($tx->getTxHash() != $txc->getTxHash()) ||
+                    ($tx->getTxId() != $txc->getTxId()) ||
                     ($tx->getVout() != $txc->getVout()) ||
                     ($gmpCmp != 0)
                 ) {
@@ -445,7 +445,7 @@ class DefaultConflictHandler implements ConflictHandlerInterface
                     ($tx->getConfirmations() != $txc->getConfirmations()) ||
                     ($tx->getDoubleSpend() != $txc->getDoubleSpend()) ||
                     //($tx->getSpent() != $txc->getSpent()) ||
-                    ($tx->getTxHash() != $txc->getTxHash()) ||
+                    ($tx->getTxId() != $txc->getTxId()) ||
                     ($tx->getVout() != $txc->getVout()) ||
                     ($gmpCmp != 0) ||
                     ($tx->getAddress() != $txc->getAddress())
@@ -460,6 +460,30 @@ class DefaultConflictHandler implements ConflictHandlerInterface
                     "No found transaction in second array ( " . serialize($tx) . " )."
                 );
             }
+        }
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function estimatefee($data)
+    {
+        if (1 === count($data)) {
+            return;
+        }
+        if (2 !== count($data)) {
+            throw new BEInvalidArgumentException("Data array for verification must have size 1 or 2.");
+        }
+        /** @var double $estimatefee1*/
+        $estimatefee1 = & $data[0];
+        /** @var double $estimatefee2*/
+        $estimatefee2 = & $data[1];
+        if ((!is_double($estimatefee1)) || (!is_double($estimatefee2))) {
+            throw new BEInvalidArgumentException('Elements of data array must be double.');
+        }
+        if ($estimatefee1 !== $estimatefee2) {
+            //HUERAGA - better to compare through any epsilon
+            throw new ConflictHandlerException('No equal results for estimatefee from different services.');
         }
     }
 

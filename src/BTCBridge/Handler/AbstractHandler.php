@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /*
  * This file is part of the BTCBridge package.
  *
@@ -262,11 +262,26 @@ abstract class AbstractHandler
      * @return string If the transaction was accepted by the node for broadcast, this will be the TXID
      * of the transaction encoded as hex in RPC byte order.
      *
-     * @throws BERuntimeException in case of any error
+     * @throws BERuntimeException in case of any error of this type
      * @throws BEInvalidArgumentException if error of this type
      *
      */
     abstract public function sendrawtransaction($transaction);
+
+    /**
+     * The estimatefee RPC estimates the transaction fee per kilobyte
+     * that needs to be paid for a transaction to be included within a certain number of blocks.
+     * @link https://bitcoin.org/en/developer-reference#estimatefee Official bitcoin documentation.
+     *
+     * @param int $blocks
+     *
+     * @return double the fee the transaction needs to pay per kilobyte
+     *
+     * @throws BERuntimeException in case of any error of this type
+     * @throws BEInvalidArgumentException if error of this type
+     *
+     */
+    abstract public function estimatefee($blocks = 2);
 
     /**
      * This Method Creates a new wallet
