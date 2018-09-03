@@ -28,6 +28,9 @@ class ListTransactionsOptions
     /** @var string $starttxid */
     protected $starttxid;
 
+    /** @var string $finishtxid */
+    protected $finishtxid;
+
     /** @var string $omit_addresses */
     protected $omit_addresses;
 
@@ -116,6 +119,32 @@ class ListTransactionsOptions
             }
         }
         $this->starttxid = $starttxid;
+        return $this;
+    }
+
+    /**
+     * @return string
+     */
+    public function getFinishtxid()
+    {
+        return $this->finishtxid;
+    }
+
+    /**
+     * @param string $finishtxid
+     * @return $this
+     * @throws BEInvalidArgumentException in case of error of this type
+     */
+    public function setFinishtxid($finishtxid)
+    {
+        if ((!is_string($finishtxid)) || (trim($finishtxid) == '')) {
+            if (!is_null($finishtxid)) {
+                throw new BEInvalidArgumentException(
+                    'starttxid variable must be non empty string.'
+                );
+            }
+        }
+        $this->finishtxid = $finishtxid;
         return $this;
     }
 

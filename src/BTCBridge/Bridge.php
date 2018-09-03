@@ -1089,9 +1089,9 @@ class Bridge
                     $retVal->getWif() . ';' . $retVal->getLegacy() . ';'
                     . $retVal->getBech32() . ';'. $retVal->getP2sh() . PHP_EOL,
                     FILE_APPEND
-                ) ) {
-                    throw new BERuntimeException(
-                        'Write data into the file ' . $this->getOption(Bridge::OPT_LOCAL_PATH_OF_WALLET_DATA) . ' failed.'
+            ) ) {
+                throw new BERuntimeException(
+                    'Write data into the file ' . $this->getOption(Bridge::OPT_LOCAL_PATH_OF_WALLET_DATA) . ' failed.'
                 );
             }
         }

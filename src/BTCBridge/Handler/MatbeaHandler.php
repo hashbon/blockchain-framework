@@ -132,6 +132,10 @@ class MatbeaHandler extends AbstractHandler
                 $url .= $sep . 'starttxid=' . $options->getStarttxid();
                 $sep = '&';
             }
+            if (null !== $options->getFinishtxid()) {
+                $url .= $sep . 'finishtxid=' . $options->getFinishtxid();
+                $sep = '&';
+            }
             if (null !== $options->getOmitAddresses()) {
                 $url .= $sep . 'omit_addresses=' . (int)$options->getOmitAddresses();
             }
@@ -551,14 +555,16 @@ class MatbeaHandler extends AbstractHandler
      */
     public function estimatefee($blocks = 2)
     {
-        if ((!is_int($blocks)) || ($blocks < 1)) {
-            throw new BEInvalidArgumentException('blocks variable array must be positive integer.');
+        if ((!is_int($blocks)) || ($blocks < 1) || ($blocks > 25)) {
+            throw new BEInvalidArgumentException(
+                'blocks variable must be positive integer smaller than 26.'
+            );
         }
 
         $curr = $this->currency;
         $url = $this->getOption(self::OPT_BASE_URL) . '/' . $curr . '/estimatefee?blocks=' . $blocks;
         if ($this->token) {
-            $url .= "&token=" . $this->token;
+            $url .= '&token=' . $this->token;
         }
 
         $ch = curl_init();

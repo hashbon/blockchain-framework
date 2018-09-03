@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 require_once __DIR__ . "/../vendor/autoload.php";
 
@@ -119,12 +119,12 @@ try {
     $logger->pushHandler(new Monolog\Handler\StreamHandler($logfilename));
 
     $blockTrailHandler = (new \BTCBridge\Handler\BlockTrailHandler(
-        new \BTCBridge\Api\CurrencyTypeEnum(\BTCBridge\Api\CurrencyTypeEnum::TBTC)
+        new \BTCBridge\Api\CurrencyTypeEnum(\BTCBridge\Api\CurrencyTypeEnum::BTC)
     ))->setToken("YOUR_BLOCKTRAIL_TOKEN");
 
     $matbeaHandler = (new \BTCBridge\Handler\MatbeaHandler(
-        new \BTCBridge\Api\CurrencyTypeEnum(\BTCBridge\Api\CurrencyTypeEnum::TBTC)
-    ))->setToken("YOUR_MATBEA_TOKEN");
+        new \BTCBridge\Api\CurrencyTypeEnum(\BTCBridge\Api\CurrencyTypeEnum::BTC)
+    ))->setToken(/*"YOUR_MATBEA_TOKEN"*/'askoinatbea');
 
     /*$matbeaHandler->setOption(
         \BTCBridge\Handler\AbstractHandler::OPT_BASE_URL,
@@ -138,7 +138,7 @@ try {
     );
     //HUERAGA - vipilit
     $bridge = new \BTCBridge\Bridge(
-        new \BTCBridge\Api\CurrencyTypeEnum(\BTCBridge\Api\CurrencyTypeEnum::TBTC),
+        new \BTCBridge\Api\CurrencyTypeEnum(\BTCBridge\Api\CurrencyTypeEnum::BTC),
         [$matbeaHandler, $blockTrailHandler],
         $conflictHandler,
         new \BTCBridge\ResultHandler\DefaultResultHandler(),
@@ -146,19 +146,23 @@ try {
     );
     $bridge->setOption(
         \BTCBridge\Bridge::OPT_LOCAL_PATH_OF_WALLET_DATA,
-        __DIR__ . "/data/wallet.dat"
+        __DIR__ . '/data/wallet.dat'
     );
 
-    $addr = $bridge->getnewaddress();
-    $addr = $addr;
+    //$addr = $bridge->getnewaddress();
+    //$addr1 = $bridge->dumpprivkey($addr->getP2sh());
+    //$addr2 = $bridge->dumpprivkey($addr->getBech32());
+    //$addr3 = $bridge->dumpprivkey($addr->getLegacy());
+    //$r = 123;
     //$res = $bridge->getbalance('12S42ZEw2741DHrivgZHLfX8M58mxb7bFy');
     //$res = $bridge->getbalance('name__2N1WA');
 
-    //$o = new \BTCBridge\Api\ListTransactionsOptions();
-    //$o->setOmitAddresses(false);
+    $o = new \BTCBridge\Api\ListTransactionsOptions();
+    $o->setOmitAddresses(false);
+    $o->setFinishtxid('7722cee32dde81a29d4940d28b178b0914e7e8ac5ee52547538e954f4f5ee71a');
 
     //$res = $bridge->listtransactions("name__2N1WA", $o);
-    //$res = $bridge->listtransactions("12S42ZEw2741DHrivgZHLfX8M58mxb7bFy");
+    $res = $bridge->listtransactions('12S42ZEw2741DHrivgZHLfX8M58mxb7bFy', $o);
 
     /*$txs = [];
     //$bridge->gettransactions($txs);
