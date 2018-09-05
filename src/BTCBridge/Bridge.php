@@ -6,6 +6,7 @@ use BitWasp\Bitcoin\Address\AddressCreator;
 use BitWasp\Bitcoin\Address\PayToPubKeyHashAddress;
 use BitWasp\Bitcoin\Address\ScriptHashAddress;
 use BitWasp\Bitcoin\Exceptions\UnrecognizedAddressException;
+use BitWasp\Bitcoin\Exceptions\InvalidPrivateKey;
 use BitWasp\Bitcoin\Script\WitnessProgram;
 use BitWasp\Bitcoin\Address\SegwitAddress;
 use BTCBridge\Api\DetailedAddress;
@@ -300,16 +301,19 @@ class Bridge
                 $this->getOption(self::OPT_MINIMAL_AMOUNT_FOR_SENT) . "."
             );
         }
-        if (!is_array($outputs) || empty($outputs)) {
+        if (!is_array($outputs)) {
             throw new BEInvalidArgumentException(
                 "outputs variable must be non empty array of TransactionReference type."
             );
         }
-        /** @var $outputs TransactionReference[] */
+        if (empty($outputs)) {
+            return [];
+        }
 
         //Now we'll check sufficiency of total balance of passed subset of outputs -
         //and will try to find the output with the same value as needed
         $sum = 0;
+        /** @var $outputs TransactionReference[] */
         for ($i = 0, $ic = count($outputs); $i < $ic; ++$i) {
             if ($outputs[$i]->getValue()->getSatoshiValue() == $amount) {
                 return [$outputs[$i]];
@@ -1064,6 +1068,8 @@ class Bridge
         $retVal = new DetailedAddress;
         try {
             $privateKey = PrivateKeyFactory::create();
+            //$privateKey = PrivateKeyFactory::fromWif('...');
+
             $wif = $privateKey->toWif($this->network);
             $retVal->setWif($wif);
             //echo 'wif: ' . $wif . PHP_EOL;
@@ -1180,16 +1186,17 @@ class Bridge
      * must have in order to be returned.
      * @param string $commentTo A locally-stored (not broadcast) comment assigned to this transaction.
      * Meant to be used for describing who the payment was sent to. Default is no comment.
+     * @param callable $getWIFFunc Function for extracting WIF by addresses
      *
      * @return string $transactionId
      *
      * @throws BEInvalidArgumentException if error of this type
      * @throws BERuntimeException in case of any runtime error
      * @throws Base58ChecksumFailure
-     * @throws \BitWasp\Bitcoin\Exceptions\InvalidPrivateKey
+     * @throws InvalidPrivateKey
      * @throws \Exception
      */
-    public function sendfrom($walletName, $address, $amount, $confirmations = 1, $comment = "", $commentTo = "")
+    public function sendfrom($walletName, $address, $amount, $confirmations = 1, $comment = "", $commentTo = "", callable $getWIFFunc = null)
     {
         if ((!is_string($walletName)) || empty($walletName)) {
             throw new BEInvalidArgumentException("Wallet name must be non empty string.");
@@ -1217,6 +1224,11 @@ class Bridge
         }
         if (!is_string($commentTo)) {
             throw new BEInvalidArgumentException("commentTo variable must be a string variable.");
+        }
+        if (!is_null($getWIFFunc)) {
+            if (!is_callable($getWIFFunc)) {
+                throw new BEInvalidArgumentException('getWIFFunc must be callable or null.');
+            }
         }
 
         $results = [];
@@ -1254,6 +1266,7 @@ class Bridge
                 $requiredCoins = $amount + $requiredFeeWithChange;
             } elseif ($change > 0) {
                 if ($change < intval($this->getOption(self::OPT_MINIMAL_AMOUNT_FOR_SENT))) {
+                    //HUERAGA - may be needs to change business logic here
                     $amount -= ( intval($this->getOption(self::OPT_MINIMAL_AMOUNT_FOR_SENT)) - $change );
                     if ($amount < intval($this->getOption(self::OPT_MINIMAL_AMOUNT_FOR_SENT))) {
                         throw new BEInvalidArgumentException(
@@ -1280,7 +1293,11 @@ class Bridge
         foreach ($outputsForSpent as $output) {
             $txSource = new \stdClass();
             $txSource->address = $addressCreator->fromString($output->getAddress(), $this->network);
-            $txSource->privateKey = $this->dumpprivkey($output->getAddress());
+            if (is_null($getWIFFunc)) {
+                $txSource->privateKey = $this->dumpprivkey($output->getAddress());
+            } else {
+                $txSource->privateKey = $getWIFFunc($output->getAddress());
+            }
             if (!$txSource->privateKey) {
                 throw new BERuntimeException(
                     "dumpprivkey did not return object on address \"" . $output->getAddress() . "\"."
@@ -1332,16 +1349,17 @@ class Bridge
      * @param string $address The address to which the bitcoins should be sent
      * @param integer $amount The amount to spend in satoshis.
      * @param SendMoneyOptions $sendMoneyOptions (comment,confirmations,commentTo etc)
+     * @param callable $getWIFFunc Function for extracting WIF by addresses
      *
      * @return string $transactionId
      *
      * @throws BEInvalidArgumentException if error of this type
      * @throws BERuntimeException in case of any runtime error
      * @throws Base58ChecksumFailure
-     * @throws \BitWasp\Bitcoin\Exceptions\InvalidPrivateKey
+     * @throws InvalidPrivateKey
      * @throws \Exception
      */
-    public function sendfromEX($walletName, $address, $amount, SendMoneyOptions $sendMoneyOptions)
+    public function sendfromEX($walletName, $address, $amount, SendMoneyOptions $sendMoneyOptions, callable $getWIFFunc = null)
     {
         if (!is_string($walletName)) {
             throw new BEInvalidArgumentException("Wallet name variable must be non empty string.");
@@ -1359,6 +1377,11 @@ class Bridge
             throw new BEInvalidArgumentException(
                 "amount variable must be integer bigger or equal " . self::OPT_MINIMAL_AMOUNT_FOR_SENT . "."
             );
+        }
+        if (!is_null($getWIFFunc)) {
+            if (!is_callable($getWIFFunc)) {
+                throw new BEInvalidArgumentException('getWIFFunc must be callable or null.');
+            }
         }
         $confirmations = $sendMoneyOptions->getConfirmations();
         /** @noinspection PhpUnusedLocalVariableInspection */
@@ -1423,7 +1446,11 @@ class Bridge
         foreach ($outputsForSpent as $output) {
             $txSource = new \stdClass();
             $txSource->address = $addressCreator->fromString($output->getAddress(), $this->network);
-            $txSource->privateKey = $this->dumpprivkey($output->getAddress());
+            if (is_null($getWIFFunc)) {
+                $txSource->privateKey = $this->dumpprivkey($output->getAddress());
+            } else {
+                $txSource->privateKey = $getWIFFunc($output->getAddress());
+            }
             if (!$txSource->privateKey) {
                 throw new BERuntimeException(
                     "dumpprivkey did not return object on address \"" . $output->getAddress() . "\"."
@@ -1481,16 +1508,17 @@ class Bridge
      * @param int $confirmations The minimum number of confirmations the transaction containing an output
      * @param string $comment
      * A locally-stored (not broadcast) comment assigned to this transaction. Default is no comment
+     * @param callable $getWIFFunc Function for extracting WIF by addresses
      *
      * @return string $transactionId
      *
      * @throws BEInvalidArgumentException if error of this type
      * @throws BERuntimeException in case of any runtime error
      * @throws Base58ChecksumFailure
-     * @throws \BitWasp\Bitcoin\Exceptions\InvalidPrivateKey
+     * @throws InvalidPrivateKey
      * @throws \Exception
      */
-    public function sendmany($walletName, array $smoutputs, $confirmations = 1, $comment = "")
+    public function sendmany($walletName, array $smoutputs, $confirmations = 1, $comment = "", callable $getWIFFunc = null)
     {
         /** @var $smoutputs SMOutput[] */
         if (!is_string($walletName)) {
@@ -1524,6 +1552,11 @@ class Bridge
         }
         if (!is_string($comment)) {
             throw new BEInvalidArgumentException("comment variable must be a string variable.");
+        }
+        if (!is_null($getWIFFunc)) {
+            if (!is_callable($getWIFFunc)) {
+                throw new BEInvalidArgumentException('getWIFFunc must be callable or null.');
+            }
         }
 
         $results = [];
@@ -1583,7 +1616,11 @@ class Bridge
         foreach ($outputsForSpent as $output) {
             $txSource = new \stdClass();
             $txSource->address = $addressCreator->fromString($output->getAddress(), $this->network);
-            $txSource->privateKey = $this->dumpprivkey($output->getAddress());
+            if (is_null($getWIFFunc)) {
+                $txSource->privateKey = $this->dumpprivkey($output->getAddress());
+            } else {
+                $txSource->privateKey = $getWIFFunc($output->getAddress());
+            }
             if (!$txSource->privateKey) {
                 throw new BERuntimeException(
                     "dumpprivkey did not return object on address \"" . $output->getAddress() . "\"."
@@ -1636,16 +1673,17 @@ class Bridge
      * @param string $walletName The wallet, which is source for money
      * @param SMOutput[] $smoutputs Object containing key/value pairs corresponding to the addresses and amounts to pay
      * @param SendMoneyOptions $sendMoneyOptions (comment,confirmations,commentTo etc)
+     * @param callable $getWIFFunc Function for extracting WIF by addresses
      *
      * @return string $transactionId
      *
      * @throws BEInvalidArgumentException if error of this type
      * @throws BERuntimeException in case of any runtime error
      * @throws Base58ChecksumFailure
-     * @throws \BitWasp\Bitcoin\Exceptions\InvalidPrivateKey
+     * @throws InvalidPrivateKey
      * @throws \Exception
      */
-    public function sendmanyEX($walletName, array $smoutputs, SendMoneyOptions $sendMoneyOptions)
+    public function sendmanyEX($walletName, array $smoutputs, SendMoneyOptions $sendMoneyOptions, callable $getWIFFunc = null)
     {
         /** @var $smoutputs SMOutput[] */
         if (!is_string($walletName)) {
@@ -1673,6 +1711,11 @@ class Bridge
             throw new BEInvalidArgumentException(
                 "total amount from outputs must bigger or equal " . self::OPT_MINIMAL_AMOUNT_FOR_SENT . "."
             );
+        }
+        if (!is_null($getWIFFunc)) {
+            if (!is_callable($getWIFFunc)) {
+                throw new BEInvalidArgumentException('getWIFFunc must be callable or null.');
+            }
         }
         $confirmations = $sendMoneyOptions->getConfirmations();
         /** @noinspection PhpUnusedLocalVariableInspection */
@@ -1735,7 +1778,11 @@ class Bridge
         foreach ($outputsForSpent as $output) {
             $txSource = new \stdClass();
             $txSource->address = $addressCreator->fromString($output->getAddress(), $this->network);
-            $txSource->privateKey = $this->dumpprivkey($output->getAddress());
+            if (is_null($getWIFFunc)) {
+                $txSource->privateKey = $this->dumpprivkey($output->getAddress());
+            } else {
+                $txSource->privateKey = $getWIFFunc($output->getAddress());
+            }
             if (!$txSource->privateKey) {
                 throw new BERuntimeException(
                     "dumpprivkey did not return object on address \"" . $output->getAddress() . "\"."
